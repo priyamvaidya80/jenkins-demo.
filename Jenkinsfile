@@ -1,35 +1,51 @@
 pipeline {
     agent any
 
+    options {
+        skipDefaultCheckout(true)
+        timestamps()
+    }
+
     stages {
         stage('Checkout') {
             steps {
-                echo 'Source code is checked out by Jenkins'
+                checkout scm
             }
         }
 
         stage('Build') {
             steps {
-                echo 'Building the application...'
-                sh 'git --version'
-                sh 'ls -la'
+                sh 'mvn -B clean package'
             }
         }
 
         stage('Test') {
             steps {
-                echo 'Running basic validation...'
-                sh 'test -f README.md'
+                sh 'mvn -B test'
+            }
+        }
+
+        stage('Deploy') {
+            when {
+                branch 'main'
+            }
+            steps {
+                echo 'Tests passed. Ready to deploy.'
+                // Add your actual deployment command here.
             }
         }
     }
 
     post {
         success {
-            echo 'Pipeline completed successfully!'
+            echo 'CI/CD pipeline completed successfully.'
         }
         failure {
             echo 'Pipeline failed. Check the console output.'
+        }
+        always {
+            archiveArtifacts artifacts: 'target/*.jar',
+                             allowEmptyArchive: true
         }
     }
 }
