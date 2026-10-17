@@ -1,51 +1,72 @@
+
 pipeline {
     agent any
 
-    options {
-        skipDefaultCheckout(true)
-        timestamps()
+    environment {
+        EC2_PUBLIC_IP = '98.93.38.223'
+        DOCKER_IMAGE  = 'priyamvaidya062/priyamvaidya062my-web-app'
+        SSH_CRED_ID   = 'ec2-ssh-key'
     }
 
     stages {
-        stage('Checkout') {
+        stage('Checkout Code') {
             steps {
                 checkout scm
             }
         }
 
-        stage('Build') {
+        stage('Build Docker Image') {
             steps {
-                sh 'mvn -B clean package'
+                sh 'docker build -t "$DOCKER_IMAGE" .'
             }
         }
 
-        stage('Test') {
+        stage('Push Image to Docker Hub') {
             steps {
-                sh 'mvn -B test'
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub-creds',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )
+                ]) {
+                    sh '''
+                        set +x
+                        printf '%s' "$DOCKER_PASS" |
+                          docker login -u "$DOCKER_USER" \
+                            --password-stdin
+                        docker push "$DOCKER_IMAGE"
+                        docker logout
+                    '''
+                }
             }
         }
 
-        stage('Deploy') {
-            when {
-                branch 'main'
-            }
+        stage('Deploy to EC2') {
             steps {
-                echo 'Tests passed. Ready to deploy.'
-                // Add your actual deployment command here.
+                sshagent(credentials: [SSH_CRED_ID]) {
+                    sh '''
+                        set -eu
+
+                        ssh -o StrictHostKeyChecking=accept-new \
+                          ubuntu@"$EC2_PUBLIC_IP" \
+                          "docker pull '$DOCKER_IMAGE' &&
+                           (docker stop my-running-app || true) &&
+                           (docker rm my-running-app || true) &&
+                           docker run -d --restart unless-stopped \
+                             --name my-running-app \
+                             -p 8080:80 '$DOCKER_IMAGE'"
+                    '''
+                }
             }
         }
     }
 
     post {
-        success {
-            echo 'CI/CD pipeline completed successfully.'
-        }
-        failure {
-            echo 'Pipeline failed. Check the console output.'
-        }
         always {
-            archiveArtifacts artifacts: 'target/*.jar',
-                             allowEmptyArchive: true
+            sh '''
+                docker image rm "$DOCKER_IMAGE" || true
+            '''
         }
     }
 }
