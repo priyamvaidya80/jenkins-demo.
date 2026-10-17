@@ -3,7 +3,7 @@ pipeline {
     agent any
 
     environment {
-        EC2_PUBLIC_IP = '98.93.38.223'
+        EC2_PUBLIC_IP = '54.242.88.198'
         DOCKER_IMAGE  = 'priyamvaidya062/priyamvaidya062my-web-app'
         SSH_CRED_ID   = 'ec2-ssh-key'
     }
